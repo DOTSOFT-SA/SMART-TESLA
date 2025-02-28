@@ -22,8 +22,11 @@ This a **FastAPI** application that manages energy consumption data from a CSV, 
 
 ## Project Structure
 ├─ all_data.csv # Your CSV
+
 ├─ main.py # FastAPI app + ML classes + endpoints 
+
 ├─ templates/ 
+
 │ └─ index.html # Frontend HTML/JS
 
 
