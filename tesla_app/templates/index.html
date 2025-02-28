@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Energy App</title>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        .hidden { display: none; }
+        .box { border: 1px solid #ccc; padding: 1rem; margin: 1rem 0; }
+        table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+        th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: center; }
+        .form-group { margin: 0.5rem 0; }
+        label { display: inline-block; width: 200px; }
+        input { padding: 0.3rem; }
+    </style>
+</head>
+<body>
+    <h1>Energy Consumption App</h1>
+
+    <div>
+        <input type="text" id="supplyNumberInput" placeholder="Enter Supply Number" />
+        <button onclick="fetchData()">Fetch Data</button>
+    </div>
+
+    <!-- Table of results (all rows except last) -->
+    <div class="box">
+        <h3>Records Table</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Year</th>
+                    <th>Month</th>
+                    <th>Bill Type</th>
+                    <th>Total Energy (kWh)</th>
+                    <th>Mean Temp (°C)</th>
+                    <th>Rainfall (mm)</th>
+                    <th>Sunny Days</th>
+                </tr>
+            </thead>
+            <tbody id="resultsTbody"></tbody>
+        </table>
+    </div>
+
+    <!-- Button to show the "New Entry" form -->
+    <button onclick="showNewEntryForm()">Create a New Entry / Get Prediction</button>
+
+    <div id="newEntryForm" class="box hidden">
+        <h3>Create a New Record</h3>
+        <div class="form-group">
+            <label>Supply Number</label>
+            <input type="text" id="newSupplyNumber" readonly />
+        </div>
+        <div class="form-group">
+            <label>Year</label>
+            <input type="number" id="newYear" />
+        </div>
+        <div class="form-group">
+            <label>Month</label>
+            <input type="number" id="newMonth" />
+        </div>
+        <div class="form-group">
+            <label>Bill Type</label>
+            <select id="newBillType">
+                <option value="Estimated">Estimated</option>
+                <option value="Final">Final</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Mean Temperature (°C)</label>
+            <input type="number" step="0.01" id="newMeanTemp" />
+        </div>
+        <div class="form-group">
+            <label>Total Rainfall (mm)</label>
+            <input type="number" step="0.01" id="newRainfall" />
+        </div>
+        <div class="form-group">
+            <label>Total Sunny Days</label>
+            <input type="number" id="newSunnyDays" />
+        </div>
+        <div class="form-group">
+            <label>Total Energy (kWh)</label>
+            <input type="number" step="0.01" id="newEnergy" placeholder="Optional if forecasting future" />
+        </div>
+        <button onclick="fetchWeather()">Get Weather</button>
+        <button onclick="saveRecord()">Save Record</button>
+        <button onclick="getPrediction()">Get Prediction</button>
+
+        <p id="predictionResult" style="color:blue;"></p>
+    </div>
+
+    <script>
+        // Point this to your FastAPI server
+        const BASE_URL = "http://127.0.0.1:8000";
+
+        let currentSupplyNumber = "";
+
+        // Fetch data for supplyNumber (no pagination)
+        async function fetchData() {
+            currentSupplyNumber = document.getElementById("supplyNumberInput").value.trim();
+            if (!currentSupplyNumber) {
+                alert("Please enter a Supply Number first.");
+                return;
+            }
+            try {
+                let response = await fetch(`${BASE_URL}/api/data?supply_number=${currentSupplyNumber}`);
+                let result = await response.json();
+                displayResults(result.data);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function displayResults(rows) {
+            let tbody = document.getElementById("resultsTbody");
+            tbody.innerHTML = "";
+            rows.forEach(row => {
+                let tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${row.Year}</td>
+                    <td>${row.Month}</td>
+                    <td>${row["Bill Type"]}</td>
+                    <td>${row["Total KWh"]}</td>
+                    <td>${row["Mean Temperature (°C)"]}</td>
+                    <td>${row["Total Rainfall (mm)"]}</td>
+                    <td>${row["Total Sunny Days"]}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function showNewEntryForm() {
+            if (!currentSupplyNumber) {
+                alert("Please fetch data first with a valid Supply Number.");
+                return;
+            }
+            document.getElementById("newSupplyNumber").value = currentSupplyNumber;
+            document.getElementById("newEntryForm").classList.remove("hidden");
+        }
+
+        // Auto-fill weather
+        async function fetchWeather() {
+            let y = parseInt(document.getElementById("newYear").value);
+            let m = parseInt(document.getElementById("newMonth").value);
+            if (!y || !m) {
+                alert("Enter valid Year and Month first.");
+                return;
+            }
+            try {
+                let res = await fetch(`${BASE_URL}/api/weather?year=${y}&month=${m}`);
+                let w = await res.json();
+                document.getElementById("newMeanTemp").value = w["Mean Temperature (°C)"].toFixed(2);
+                document.getElementById("newRainfall").value = w["Total Rainfall (mm)"].toFixed(2);
+                document.getElementById("newSunnyDays").value = w["Total Sunny Days"];
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Save new record
+        async function saveRecord() {
+            let supplyNum = document.getElementById("newSupplyNumber").value;
+            let year = parseInt(document.getElementById("newYear").value);
+            let month = parseInt(document.getElementById("newMonth").value);
+            let billType = document.getElementById("newBillType").value;
+            let meanTemp = parseFloat(document.getElementById("newMeanTemp").value) || 0;
+            let rainfall = parseFloat(document.getElementById("newRainfall").value) || 0;
+            let sunny = parseInt(document.getElementById("newSunnyDays").value) || 0;
+            let energy = parseFloat(document.getElementById("newEnergy").value);
+
+            let payload = {
+                "SupplyNumber": supplyNum,
+                "Year": year,
+                "Month": month,
+                "BillType": billType,
+                "TotalEnergyConsumed": energy,
+                "MeanTemperature": meanTemp,
+                "TotalRainfall": rainfall,
+                "TotalSunnyDays": sunny
+            };
+            try {
+                let res = await fetch(`${BASE_URL}/api/new_record`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                let data = await res.json();
+                alert(data.message);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Get prediction for the newly created last row
+        async function getPrediction() {
+            if (!currentSupplyNumber) {
+                alert("Please fetch data first or enter a Supply Number.");
+                return;
+            }
+            try {
+                let res = await fetch(`${BASE_URL}/api/predict?supply_number=${currentSupplyNumber}`);
+                let result = await res.json();
+                if (result.error) {
+                    alert(result.error);
+                } else {
+                    let msg = `Predicted kWh: ${result["Predicted kWh"].toFixed(2)}`;
+                    //  (95% CI: ${result["95pct_CI_Lower"].toFixed(2)} - ${result["95pct_CI_Upper"].toFixed(2)})
+                    document.getElementById("predictionResult").textContent = msg;
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+    </script>
+</body>
+</html>
